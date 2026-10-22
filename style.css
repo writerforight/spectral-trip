@@ -152,8 +152,22 @@ canvas { display: block; }
 @media (max-width: 900px) {
   .lab { grid-template-columns: minmax(0, 1fr); padding: 0 16px 20px; }
   .top { padding: 12px 16px; }
-  .panel { flex-direction: row; flex-wrap: wrap; order: 2; }
-  .panel section { flex: 1 1 200px; }
+  /* phone: colours above the canvas, the rest below it */
+  .panel { display: contents; }
+  .panel section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px;
+  }
+  .panel section:first-child { order: 1; padding: 8px; }
+  .stage { order: 2; }
+  .panel section:nth-child(2) { order: 3; }
+  .panel section:nth-child(3) { order: 4; }
+  .panel section:nth-child(4) { order: 5; }
+  .panel section:first-child h2 { display: none; }
+  .palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 6px; }
+  .swatch { grid-template-columns: 1fr; justify-items: center; gap: 3px; padding: 6px 2px; font-size: 11px; }
+  .swatch .ds, .swatch kbd { display: none; }
+  .swatch .dot { width: 22px; height: 22px; }
+  .eraser { width: 100%; }
   .fx { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hint { display: none; }
 }

@@ -453,7 +453,6 @@ function fxParams() { return { ...S.fx, bpm: S.bpm }; }
 function initAudio() {
   if (audioInit) return audioInit;
   audioInit = (async () => {
-    actx = new AudioContext({ latencyHint: 'interactive' });
     await actx.audioWorklet.addModule(WORKLET_URL);
     node = new AudioWorkletNode(actx, 'spectral-synth', {
       numberOfInputs: 0,
@@ -481,13 +480,20 @@ function sendParams() {
 }
 
 async function togglePlay() {
+  // iOS Safari only unlocks audio inside the tap itself: create + resume before any await
+  if (!actx) {
+    // play through the ringer/silent switch on iPhone
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  }
+  const resumed = actx.state === 'suspended' ? actx.resume() : null;
   try {
     await initAudio();
   } catch (err) {
     $('hover').textContent = 'Audio could not start in this browser: ' + err.message;
     return;
   }
-  if (actx.state === 'suspended') await actx.resume();
+  if (resumed) await resumed;
   S.playing = !S.playing;
   node.port.postMessage({ type: S.playing ? 'play' : 'stop', pos: 0 });
   playPos = 0; playStamp = performance.now();
