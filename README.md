@@ -17,6 +17,7 @@ A psychedelic sound lab in the browser: **paint colours onto a spectrogram and t
 | Pad (gold) | Juno-style pad: three detuned saws, warm and wide |
 | Bass (blue) | fuzz bass: driven sine, round |
 | Pulse (red) | drums: low rows kick, middle snare, high hats |
+| Glide (mint) | near-sine with a touch of 2nd/3rd harmonic; every note slides in from the previous one and rings down by itself |
 
 - **Brightness = loudness.** Overlapping colours add up, visually and sonically.
 - Brushes: dot, line, wave (vibrato squiggles), spray, chord (a 7th chord stacked inside the scale). Symmetry: mirror time, mirror pitch, repeat every beat/bar.
@@ -29,10 +30,12 @@ A psychedelic sound lab in the browser: **paint colours onto a spectrogram and t
   The first click plays Am–F–C–G at 70 BPM; every click after rolls a new piece (key, progression, arpeggio shape, sevenths, tempo).
 - **Bars**: the strip under the canvas selects a bar (`←` `→`). Copy / Paste (`Ctrl/⌘ C` / `V`) a bar onto another, Duplicate, Delete,
   + Bar (up to 16), transpose with ▲ ▼ (`↑` `↓`, Shift = octave), or pick ✥ Move and drag a bar up or down in pitch. Drums never transpose.
+- 〰 Glide loads a piece on the Glide colour: 16th-note figures thrown across three octaves at ~60 BPM, so every note slides in
+  from the one before it. The first click plays D–Bm–F♯m–E in F♯ minor; every click after rolls a new one.
 - ✺ Dream generates a fresh loop in the current scale. ⤓ WAV renders two loops to a file.
 - The right-hand strip is the **live output spectrogram** on the same pitch axis as the canvas.
 
-Keys: `Space` play/stop · `1`–`8` colour · `E` eraser · `Z` undo · right-drag erases · `←` `→` bar · `↑` `↓` transpose bar.
+Keys: `Space` play/stop · `1`–`9` colour · `E` eraser · `Z` undo · right-drag erases · `←` `→` bar · `↑` `↓` transpose bar.
 
 Everything is synthesised live in an AudioWorklet; no samples, no build step, no dependencies.
 Your last pattern is kept in the browser's local storage.

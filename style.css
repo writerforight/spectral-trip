@@ -68,6 +68,7 @@ body {
 .btn.primary.on { box-shadow: 0 0 18px rgba(46, 230, 255, 0.55); }
 .btn.impala { border-color: rgba(255, 225, 77, 0.45); }
 .btn.arp { border-color: rgba(255, 79, 216, 0.45); }
+.btn.glide { border-color: rgba(71, 255, 176, 0.45); }
 .btn.small { padding: 5px 10px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: wait; }
 
@@ -177,7 +178,7 @@ canvas { display: block; }
   .panel section:nth-child(3) { order: 4; }
   .panel section:nth-child(4) { order: 5; }
   .panel section:first-child h2 { display: none; }
-  .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 6px; }
+  .palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 6px; }
   .swatch { grid-template-columns: 1fr; justify-items: center; gap: 3px; padding: 6px 2px; font-size: 11px; }
   .swatch .ds, .swatch kbd { display: none; }
   .swatch .dot { width: 22px; height: 22px; }

@@ -1,7 +1,10 @@
 // Headless check of the synth: mock the AudioWorklet globals, render the Dream loop.
 import { readFileSync } from 'node:fs';
-import { dreamPattern, impalaPattern, arpPattern, harmonicNote, randomArp, arpName, ARP_RECIPE, ARP_BPM } from '../src/patterns.js';
-import { ROWS, LAYERS, COLS_PER_BAR, HIT_LAYER, chordRows, rowFreq, inScale } from '../src/model.js';
+import {
+  dreamPattern, impalaPattern, arpPattern, harmonicNote, randomArp, arpName, ARP_RECIPE, ARP_BPM,
+  glidePattern, randomGlide, glideName, GLIDE_RECIPE,
+} from '../src/patterns.js';
+import { ROWS, LAYERS, COLS_PER_BAR, HIT_LAYER, GLIDE_LAYER, chordRows, rowFreq, inScale } from '../src/model.js';
 
 let Proc;
 globalThis.sampleRate = 48000;
@@ -101,6 +104,34 @@ check(names.size > 30, `40 seeds → ${names.size} different pieces`);
 const ga = new Float32Array(LAYERS * ROWS * C), gb = new Float32Array(LAYERS * ROWS * C);
 arpPattern(ga, C, randomArp(5)); arpPattern(gb, C, randomArp(5));
 check(ga.every((v, i) => v === gb[i]), 'same seed, same piece');
+
+// Glide: a note slides in from the previous one and settles on its own pitch
+const zc = (x, a, b) => { let n = 0; for (let i = a + 1; i < b; i++) if (x[i - 1] < 0 && x[i] >= 0) n++; return (n * sampleRate) / (b - a); };
+const gl = new Float32Array(LAYERS * ROWS * C);
+for (let c = 0; c < 8; c++) gl[(GLIDE_LAYER * ROWS + 45) * C + c] = 0.8;        // A4
+for (let c = 10; c < 30; c++) gl[(GLIDE_LAYER * ROWS + 57) * C + c] = 0.8;      // A5, an octave up
+const rg = render(gl, C, 3, { bpm: 60 }).L;
+const on = Math.round((10 / 8) * sampleRate);                                    // A5 starts at 1.25 s
+const fStart = zc(rg, on, on + 0.02 * sampleRate), fEnd = zc(rg, on + 0.5 * sampleRate, on + 0.6 * sampleRate);
+check(fStart < 700 && Math.abs(fEnd - 880) < 15, `glide slides A4 → A5 (${fStart.toFixed(0)} Hz → ${fEnd.toFixed(0)} Hz)`);
+const lvl = (a) => stats(rg.subarray(on + a * sampleRate, on + (a + 0.1) * sampleRate)).rms;
+check(lvl(1.2) < lvl(0.1) * 0.35, `glide rings down by itself (${(20 * Math.log10(lvl(1.2) / lvl(0.1))).toFixed(0)} dB after 1.1 s)`);
+
+const gp = new Float32Array(LAYERS * ROWS * C);
+glidePattern(gp, C);
+let gRows = new Set();
+for (let r = 0; r < ROWS; r++) for (let c = 0; c < C; c++) if (gp[(GLIDE_LAYER * ROWS + r) * C + c] > 0) gRows.add(r);
+check(Math.min(...gRows) >= 30 && Math.max(...gRows) <= 61, `glide preset stays F♯3…C♯6 (rows ${Math.min(...gRows)}–${Math.max(...gRows)})`);
+check(glideName(GLIDE_RECIPE) === 'F♯ minor · D–Bm–F♯m–E · glide · 60 BPM', glideName(GLIDE_RECIPE));
+const sg = stats(render(gp, C, 6, { bpm: 60, smear: 0.15 }).L);
+check(sg.bad === 0 && sg.rms > 0.01 && sg.pk < 1.5, `glide preset sounds (rms ${sg.rms.toFixed(3)}, peak ${sg.pk.toFixed(2)})`);
+const gn = new Set();
+for (let seed = 1; seed <= 20; seed++) {
+  const spec = randomGlide(seed * 104729); gn.add(glideName(spec) + spec.figure);
+  const g2 = new Float32Array(LAYERS * ROWS * C); glidePattern(g2, C, spec);
+  check(g2.some((v) => v > 0) && spec.bpm >= 54 && spec.bpm <= 68, `glide piece ${seed}: ${glideName(spec)}`);
+}
+check(gn.size > 15, `20 seeds → ${gn.size} different glide pieces`);
 
 // chords: A dorian on A3 → A C E G; chromatic → minor 7th
 check(JSON.stringify(chordRows(33, 9, 'dorian')) === JSON.stringify([33, 36, 40, 43]), 'Am7 in A dorian');

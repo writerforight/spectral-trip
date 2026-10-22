@@ -1,5 +1,5 @@
 // "Dream" generator: fills the grid with a playable psychedelic loop in the current scale.
-import { ROWS, SCALES, NAMES, COLS_PER_BAR, PAD_LAYER, BASS_LAYER, HIT_LAYER, chordRows } from './model.js?v=5';
+import { ROWS, SCALES, NAMES, COLS_PER_BAR, PAD_LAYER, BASS_LAYER, HIT_LAYER, GLIDE_LAYER, chordRows } from './model.js?v=6';
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -223,4 +223,46 @@ export function arpPattern(grid, C, spec = ARP_RECIPE) {
   for (let c = 0; c < C; c++) {
     for (let r = 72; r < ROWS; r++) at(4, r, c, 0.05 + 0.015 * Math.sin(c * 0.37 + r * 1.3));
   }
+}
+
+// "Glide": the sliding-sine sound. 16th-note figures thrown across three octaves on the Glide
+// colour, so every note slides in from the one before it; each rings down by itself.
+// GLIDE_RECIPE is D–Bm–F♯m–E in F♯ minor at 60 BPM; randomGlide(seed) rolls a new piece.
+export const GLIDE_RECIPE = {
+  bpm: 60, root: 6, scale: 'minor', prog: [5, 3, 0, 6], sevenths: false, figure: 0,
+};
+// [16th step, chord tone, octave] — tone ≥ chord size wraps up an octave
+const FIGURES = [
+  [[0, 2, 2], [1, 1, 1], [2, 1, 2], [3, 2, 1], [4, 0, 0], [7, 0, 1], [10, 0, 2], [11, 1, 0], [12, 2, 0], [13, 1, 1]],
+  [[0, 0, 0], [1, 2, 0], [2, 1, 1], [3, 0, 2], [4, 2, 1], [8, 1, 2], [9, 0, 1], [12, 2, 1], [13, 1, 0], [14, 0, 2]],
+  [[0, 1, 2], [2, 0, 1], [3, 2, 1], [4, 0, 0], [6, 2, 2], [8, 1, 1], [10, 2, 0], [11, 0, 2], [12, 1, 1], [14, 2, 1]],
+];
+
+export function randomGlide(seed) {
+  const R = rng(seed ^ 0x9e3779b9);
+  return { ...randomArp(seed), bpm: 54 + Math.floor(R() * 15), sevenths: false, figure: Math.floor(R() * FIGURES.length) };
+}
+
+export function glideName(spec) {
+  const chords = spec.prog.map((d) => chordName(chordAt(spec, d))).join('–');
+  return `${NAMES[spec.root]} ${spec.scale} · ${chords} · glide · ${spec.bpm} BPM`;
+}
+
+export function glidePattern(grid, C, spec = GLIDE_RECIPE) {
+  grid.fill(0);
+  const bars = C / COLS_PER_BAR, fig = FIGURES[spec.figure];
+  const notes = [];
+  for (let b = 0; b < bars; b++) {
+    const tones = chordAt(spec, spec.prog[b % spec.prog.length]), n = tones.length;
+    for (const [step, k, oct] of fig) {
+      let r = tones[k % n] + 12 * (oct + Math.floor(k / n));
+      while (r > 61) r -= 12;               // keep it between F♯3 and C♯6, like the original sound
+      notes.push([b * COLS_PER_BAR + step * 2, r]);
+    }
+  }
+  // each note holds 2/3 of a bar (it fades by itself), then a silent column before every onset
+  // so a row that comes back, or a note wrapping past the loop point, starts afresh
+  const at = (c, r) => (GLIDE_LAYER * ROWS + r) * C + (((c % C) + C) % C);
+  for (const [c0, r] of notes) for (let c = c0; c < c0 + (2 * COLS_PER_BAR) / 3; c++) grid[at(c, r)] = 0.75;
+  for (const [c0, r] of notes) grid[at(c0 - 1, r)] = 0;
 }

@@ -1,6 +1,6 @@
 // Shared constants: the grid is LAYERS × ROWS × C, row 0 = C1, one row per semitone.
 export const ROWS = 84;                 // C1 … B7
-export const LAYERS = 8;
+export const LAYERS = 9;
 export const F0 = 32.70319566;          // C1 in Hz
 export const COLS_PER_BEAT = 8;
 export const COLS_PER_BAR = 32;
@@ -17,8 +17,9 @@ export const LAYER_DEFS = [
   { name: 'Pad',    color: '#ffe14d', rgb: [255, 225, 77], desc: 'Juno-style pad · warm, wide chords' },
   { name: 'Bass',   color: '#4f6dff', rgb: [79, 109, 255], desc: 'fuzz bass · round, driven' },
   { name: 'Pulse',  color: '#ff4646', rgb: [255, 70, 70],  desc: 'drums · low kick, mid snare, high hat' },
+  { name: 'Glide',  color: '#47ffb0', rgb: [71, 255, 176], desc: 'sliding sine · glides in from the last note' },
 ];
-export const PAD_LAYER = 5, BASS_LAYER = 6, HIT_LAYER = 7;
+export const PAD_LAYER = 5, BASS_LAYER = 6, HIT_LAYER = 7, GLIDE_LAYER = 8;
 
 export const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 export const noteName = (r) => NAMES[r % 12] + (1 + Math.floor(r / 12));

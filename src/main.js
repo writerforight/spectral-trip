@@ -1,13 +1,16 @@
 import {
-  ROWS, LAYERS, F0, COLS_PER_BEAT, COLS_PER_BAR, HIT_LAYER,
+  ROWS, LAYERS, F0, COLS_PER_BEAT, COLS_PER_BAR, HIT_LAYER, GLIDE_LAYER,
   LAYER_DEFS, NAMES, SCALES, noteName, inScale, chordRows, PAD_LAYER,
-} from './model.js?v=5';
-import { buildFX } from './fx.js?v=5';
-import { dreamPattern, impalaPattern, arpPattern, randomArp, arpName, ARP_RECIPE } from './patterns.js?v=5';
-import { encodeWav } from './wav.js?v=5';
+} from './model.js?v=6';
+import { buildFX } from './fx.js?v=6';
+import {
+  dreamPattern, impalaPattern, arpPattern, randomArp, arpName, ARP_RECIPE,
+  glidePattern, randomGlide, glideName, GLIDE_RECIPE,
+} from './patterns.js?v=6';
+import { encodeWav } from './wav.js?v=6';
 
 const $ = (id) => document.getElementById(id);
-const WORKLET_URL = new URL('./synth-worklet.js?v=5', import.meta.url);
+const WORKLET_URL = new URL('./synth-worklet.js?v=6', import.meta.url);
 const STORE = 'spectral-trip-v1';
 const MAX_BARS = 16;
 
@@ -47,17 +50,17 @@ function save() {
     let bin = '';
     for (let i = 0; i < q.length; i += 0x8000) bin += String.fromCharCode.apply(null, q.subarray(i, i + 0x8000));
     const { grid, playing, eraser, ...rest } = S;
-    localStorage.setItem(STORE, JSON.stringify({ v: 2, ...rest, g: btoa(bin) }));
+    localStorage.setItem(STORE, JSON.stringify({ v: 3, ...rest, g: btoa(bin) }));
   } catch { /* storage unavailable: fine */ }
 }
 function load() {
   try {
     const j = JSON.parse(localStorage.getItem(STORE));
-    if (!j || (j.v !== 1 && j.v !== 2)) return false;
+    if (!j || ![1, 2, 3].includes(j.v)) return false;
     const bin = atob(j.g);
     const C = j.bars * COLS_PER_BAR;
-    // v1 had 6 layers with the drums at index 5
-    const map = j.v === 1 ? [0, 1, 2, 3, 4, HIT_LAYER] : null;
+    // v1 had 6 layers with the drums at index 5, v2 had 8 (no Glide)
+    const map = j.v === 1 ? [0, 1, 2, 3, 4, HIT_LAYER] : j.v === 2 ? [0, 1, 2, 3, 4, 5, 6, 7] : null;
     const oldL = map ? map.length : LAYERS;
     if (bin.length !== oldL * ROWS * C) return false;
     if (map && j.layer !== undefined) j.layer = map[j.layer];
@@ -752,6 +755,21 @@ function buildUI() {
     impalaPattern(S.grid, S.C, S.root, S.scale);
     syncControls();
     selectLayer(PAD_LAYER);
+    sendParams();
+    drawKeys();
+    changed();
+  });
+  let glideClicks = 0;
+  $('glide').addEventListener('click', () => {
+    // first click: D–Bm–F♯m–E in F♯ minor; every click after: a new piece
+    const spec = glideClicks++ ? randomGlide((Math.random() * 2 ** 31) | 0) : GLIDE_RECIPE;
+    if (S.bars < 4) { setBars(4); $('bars').value = 4; } else pushUndo();
+    Object.assign(S, { bpm: spec.bpm, root: spec.root, scale: spec.scale, snap: true });
+    Object.assign(S.fx, { smear: 0.15, swirl: 0.35, trip: 0, echo: 0.25, space: 0.55, pump: 0, wobble: 0.05, sweep: 0 });
+    glidePattern(S.grid, S.C, spec);
+    $('piece').textContent = '〰 ' + glideName(spec);
+    syncControls();
+    selectLayer(GLIDE_LAYER);
     sendParams();
     drawKeys();
     changed();

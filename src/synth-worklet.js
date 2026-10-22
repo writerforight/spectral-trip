@@ -3,10 +3,11 @@
 // Runs in an AudioWorklet (live) and in an OfflineAudioContext (WAV export).
 // Outputs: 0 = melodic voices (stereo), 1 = drums (stereo), 2 = sidechain "pump" gain (mono).
 
-const ROWS = 84, LAYERS = 8, F0 = 32.70319566, HIT = 7;
+const ROWS = 84, LAYERS = 9, F0 = 32.70319566, HIT = 7, GLIDE = 8;
 const COLS_PER_BEAT = 8;
 const TBL = 2048;
-const LAYER_GAIN = [0.8, 0.9, 0.75, 0.7, 1.0, 0.6, 0.9];
+const LAYER_GAIN = [0.8, 0.9, 0.75, 0.7, 1.0, 0.6, 0.9, 0, 0.9];
+const ST = Math.LN2 / 12;     // semitones → log frequency
 
 function table(fn) {
   const t = new Float32Array(TBL + 1);
@@ -92,6 +93,25 @@ class SpectralSynth extends AudioWorkletProcessor {
     this.pump = o.pump ?? 0;
     this.pumpT = 9;
 
+    // Glide: each note slides in from the previous one (τ 60 ms) and rings down by itself;
+    // the 2nd and 3rd harmonics fade faster than the fundamental (≈ −13, −18, −19 dB/s)
+    this.gOff = new Float32Array(ROWS);            // current pitch offset in semitones
+    this.gE1 = new Float32Array(ROWS).fill(1);
+    this.gE2 = new Float32Array(ROWS).fill(1);
+    this.gE3 = new Float32Array(ROWS).fill(1);
+    this.gLast = -1;
+    this.gK = Math.exp(-1 / (0.06 * sr));
+    this.gAtk = 1 - Math.exp(-1 / (0.01 * sr));    // 10 ms attack, 60 ms release, no smear
+    this.gRel = 1 - Math.exp(-1 / (0.06 * sr));
+    // low notes ring longer: τ 0.68 s at F♯4, ∝ 1/√f
+    this.gD1 = new Float64Array(ROWS); this.gD2 = new Float64Array(ROWS); this.gD3 = new Float64Array(ROWS);
+    for (let r = 0; r < ROWS; r++) {
+      const tau = 0.68 * Math.sqrt(370 / this.freq[r]);
+      this.gD1[r] = Math.exp(-1 / (tau * sr));
+      this.gD2[r] = Math.exp(-1 / (tau * 0.72 * sr));
+      this.gD3[r] = Math.exp(-1 / (tau * 0.66 * sr));
+    }
+
     // percussion state per row
     this.hT = new Float32Array(ROWS).fill(9);
     this.hA = new Float32Array(ROWS);
@@ -140,17 +160,33 @@ class SpectralSynth extends AudioWorkletProcessor {
         if (r < 24) this.pumpT = 0;     // kicks drive the sidechain
       }
     }
+    // Glide onsets (a note starts or jumps louder), low to high: each slides from the note before it
+    for (let r = 0; r < ROWS; r++) {
+      const b = (GLIDE * ROWS + r) * C;
+      const a = G[b + col], p = G[b + prev];
+      if (a > 0.01 && (p < 0.01 || a > p + 0.3)) {
+        this.gOff[r] = this.gLast < 0 ? 0 : Math.max(-12, Math.min(12, this.gLast - r));
+        this.gE1[r] = this.gE2[r] = this.gE3[r] = 1;
+        this.gLast = r;
+      }
+    }
   }
 
   renderVoice(l, r, i, len, a0, a1, frac, dfr, e, L, R) {
     const vi = l * ROWS + r, env = this.env, slew = this.slew;
     let amp = this.amp[vi], fr = frac;
-    for (let k = 0; k < len; k++) {
-      let t = (fr - (1 - e)) / e;
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      amp += (a0 + (a1 - a0) * t - amp) * slew;
-      env[k] = amp;
-      fr += dfr;
+    if (l === GLIDE) {
+      // no smear: the note must not sound before its onset, where the slide starts
+      const s = a0 > amp ? this.gAtk : this.gRel;
+      for (let k = 0; k < len; k++) { amp += (a0 - amp) * s; env[k] = amp; }
+    } else {
+      for (let k = 0; k < len; k++) {
+        let t = (fr - (1 - e)) / e;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        amp += (a0 + (a1 - a0) * t - amp) * slew;
+        env[k] = amp;
+        fr += dfr;
+      }
     }
     this.amp[vi] = amp < 1e-6 ? 0 : amp;
 
@@ -195,6 +231,21 @@ class SpectralSynth extends AudioWorkletProcessor {
         ph += inc; if (ph >= 1) ph -= 1;
         L[i + k] += s * gl; R[i + k] += s * gr;
       }
+    } else if (l === GLIDE) {
+      // near-sine + a little 2nd/3rd harmonic, pitch sliding in from the previous note
+      const gk = this.gK, d1 = this.gD1[r], d2 = this.gD2[r], d3 = this.gD3[r];
+      let off = this.gOff[r], e1 = this.gE1[r], e2 = this.gE2[r], e3 = this.gE3[r];
+      for (let k = 0; k < len; k++) {
+        let p2 = ph * 2, p3 = ph * 3;
+        p2 -= Math.floor(p2); p3 -= Math.floor(p3);
+        const s = (lk(SIN, ph) * e1 + lk(SIN, p2) * 0.22 * e2 + lk(SIN, p3) * 0.08 * e3) * env[k];
+        ph += off === 0 ? inc : inc * Math.exp(off * ST);
+        if (ph >= 1) ph -= 1;
+        off *= gk; if (off < 1e-3 && off > -1e-3) off = 0;
+        e1 *= d1; e2 *= d2; e3 *= d3;
+        L[i + k] += s * gl; R[i + k] += s * gr;
+      }
+      this.gOff[r] = off; this.gE1[r] = e1; this.gE2[r] = e2; this.gE3[r] = e3;
     } else if (l === 5) {
       // Pad: three detuned saws spread L/C/R, softened by a one-pole low-pass (Juno-ish)
       const T = this.saw[Math.min(6, (r / 12) | 0)];
@@ -293,7 +344,8 @@ class SpectralSynth extends AudioWorkletProcessor {
       const c1 = (col + 1) % C;
       let weight = 0;
 
-      for (let l = 0; l < HIT; l++) {
+      for (let l = 0; l < LAYERS; l++) {
+        if (l === HIT) continue;
         for (let r = 0; r < ROWS; r++) {
           const vi = l * ROWS + r, base = vi * C;
           const a0 = playing ? G[base + col] : 0, a1 = playing ? G[base + c1] : 0;
