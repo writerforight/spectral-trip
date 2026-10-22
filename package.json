@@ -1,0 +1,6 @@
+{
+  "name": "spectral-trip",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/synth.test.js" }
+}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spectral Trip</title>
+  <meta name="description" content="A psychedelic sound lab: paint colours onto a spectrogram, every colour is a timbre, and the loop plays what you drew.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+
+  <header class="top">
+    <div class="brand">
+      <h1 class="logo">SPECTRAL TRIP</h1>
+      <span class="tag">paint the spectrum · every colour is a timbre</span>
+    </div>
+    <div class="transport">
+      <button id="play" class="btn primary" title="Space">▶ Play</button>
+      <label class="field">BPM <input id="bpm" type="number" min="50" max="200" value="112"></label>
+      <label class="field">Bars
+        <select id="bars"><option>1</option><option>2</option><option selected>4</option><option>8</option></select>
+      </label>
+      <button id="dream" class="btn" title="Generate a new loop in this scale">✺ Dream</button>
+      <button id="undo" class="btn" title="Z">↶ Undo</button>
+      <button id="clear" class="btn">Clear</button>
+      <button id="wav" class="btn">⤓ WAV</button>
+    </div>
+  </header>
+
+  <main class="lab">
+    <aside class="panel">
+      <section>
+        <h2>Colour = timbre</h2>
+        <div id="palette" class="palette"></div>
+        <button id="eraser" class="btn small eraser" title="E · or right-click drag">⌫ Eraser (all colours)</button>
+      </section>
+      <section>
+        <h2>Brush</h2>
+        <div id="shapes" class="seg">
+          <button data-shape="dot" class="on">Dot</button>
+          <button data-shape="line">Line</button>
+          <button data-shape="wave">Wave</button>
+          <button data-shape="spray">Spray</button>
+        </div>
+        <label class="slider">Size <input id="size" type="range" min="0" max="6" step="1" value="1"><output></output></label>
+        <label class="slider">Intensity <input id="intensity" type="range" min="0.1" max="1" step="0.05" value="0.8"><output></output></label>
+      </section>
+      <section>
+        <h2>Symmetry</h2>
+        <label class="check"><input id="mirrorX" type="checkbox"> Mirror time</label>
+        <label class="check"><input id="mirrorY" type="checkbox"> Mirror pitch</label>
+        <label class="field wide">Repeat every
+          <select id="repeat">
+            <option value="0">off</option><option value="8">1 beat</option>
+            <option value="16">2 beats</option><option value="32">1 bar</option>
+          </select>
+        </label>
+      </section>
+      <section>
+        <h2>Scale</h2>
+        <label class="field wide">Root <select id="root"></select></label>
+        <label class="field wide">Mode <select id="scale"></select></label>
+        <label class="check"><input id="snap" type="checkbox" checked> Snap to scale</label>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div id="wrap" class="canvas-wrap">
+        <canvas id="keys"></canvas>
+        <canvas id="grid"></canvas>
+        <div class="mirror-box">
+          <canvas id="mirror"></canvas>
+          <span class="mirror-label">live output</span>
+        </div>
+      </div>
+      <div class="status"><span id="hover">—</span><span class="hint">Space play · 1–6 colour · E eraser · Z undo · right-drag erases</span></div>
+      <div class="fx">
+        <label class="knob">Smear <input data-fx="smear" type="range" min="0" max="1" step="0.01" value="0.2"><small>gate ↔ swell</small></label>
+        <label class="knob">Swirl <input data-fx="swirl" type="range" min="0" max="1" step="0.01" value="0.35"><small>stereo spin</small></label>
+        <label class="knob">Trip <input data-fx="trip" type="range" min="0" max="1" step="0.01" value="0.4"><small>phaser</small></label>
+        <label class="knob">Echo <input data-fx="echo" type="range" min="0" max="1" step="0.01" value="0.3"><small>ping-pong</small></label>
+        <label class="knob">Space <input data-fx="space" type="range" min="0" max="1" step="0.01" value="0.45"><small>reverb</small></label>
+        <label class="knob">Volume <input data-fx="volume" type="range" min="0" max="1" step="0.01" value="0.8"><small>master</small></label>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
