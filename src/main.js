@@ -1,9 +1,9 @@
 import {
   ROWS, LAYERS, F0, COLS_PER_BEAT, COLS_PER_BAR, HIT_LAYER,
-  LAYER_DEFS, NAMES, SCALES, noteName, inScale,
+  LAYER_DEFS, NAMES, SCALES, noteName, inScale, chordRows, PAD_LAYER,
 } from './model.js';
 import { buildFX } from './fx.js';
-import { dreamPattern } from './patterns.js';
+import { dreamPattern, impalaPattern } from './patterns.js';
 import { encodeWav } from './wav.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +27,7 @@ const S = {
   scale: 'hijaz',
   snap: true,
   playing: false,
-  fx: { smear: 0.2, swirl: 0.35, trip: 0.4, echo: 0.3, space: 0.45, volume: 0.8 },
+  fx: { smear: 0.2, swirl: 0.35, trip: 0.4, echo: 0.3, space: 0.45, pump: 0.35, wobble: 0.25, sweep: 0, volume: 0.8 },
 };
 S.grid = new Float32Array(LAYERS * ROWS * S.C);
 
@@ -46,16 +46,20 @@ function save() {
     let bin = '';
     for (let i = 0; i < q.length; i += 0x8000) bin += String.fromCharCode.apply(null, q.subarray(i, i + 0x8000));
     const { grid, playing, eraser, ...rest } = S;
-    localStorage.setItem(STORE, JSON.stringify({ v: 1, ...rest, g: btoa(bin) }));
+    localStorage.setItem(STORE, JSON.stringify({ v: 2, ...rest, g: btoa(bin) }));
   } catch { /* storage unavailable: fine */ }
 }
 function load() {
   try {
     const j = JSON.parse(localStorage.getItem(STORE));
-    if (!j || j.v !== 1) return false;
+    if (!j || (j.v !== 1 && j.v !== 2)) return false;
     const bin = atob(j.g);
     const C = j.bars * COLS_PER_BAR;
-    if (bin.length !== LAYERS * ROWS * C) return false;
+    // v1 had 6 layers with the drums at index 5
+    const map = j.v === 1 ? [0, 1, 2, 3, 4, HIT_LAYER] : null;
+    const oldL = map ? map.length : LAYERS;
+    if (bin.length !== oldL * ROWS * C) return false;
+    if (map && j.layer !== undefined) j.layer = map[j.layer];
     for (const k of ['bars', 'bpm', 'layer', 'shape', 'size', 'intensity', 'mirrorX', 'mirrorY', 'repeat', 'root', 'scale', 'snap']) {
       if (j[k] !== undefined) S[k] = j[k];
     }
@@ -63,7 +67,11 @@ function load() {
     Object.assign(S.fx, j.fx || {});
     S.C = C;
     S.grid = new Float32Array(LAYERS * ROWS * C);
-    for (let i = 0; i < bin.length; i++) S.grid[i] = bin.charCodeAt(i) / 255;
+    const plane = ROWS * C;
+    for (let l = 0; l < oldL; l++) {
+      const nl = map ? map[l] : l;
+      for (let k = 0; k < plane; k++) S.grid[nl * plane + k] = bin.charCodeAt(l * plane + k) / 255;
+    }
     return true;
   } catch { return false; }
 }
@@ -132,6 +140,12 @@ function dab(cx, cy, strength = 1) {
     return;
   }
   const R = Math.ceil(rad);
+  if (S.shape === 'chord' && !erasing) {
+    // size = length in time; the chord is stacked in thirds inside the scale
+    const rows = chordRows(snapRow(Math.round(cy)), S.root, S.snap ? S.scale : 'chromatic');
+    for (let dc = -R; dc <= R; dc++) for (const r of rows) stamp(Math.round(cx) + dc, r, v);
+    return;
+  }
   for (let dc = -R; dc <= R; dc++) {
     for (let dr = -R; dr <= R; dr++) {
       const d = Math.hypot(dc, dr) / (rad + 0.5);
@@ -406,7 +420,7 @@ let drawing = false, last = null, start = null;
 gridCan.addEventListener('contextmenu', (e) => e.preventDefault());
 gridCan.addEventListener('pointerdown', (e) => {
   e.preventDefault();
-  gridCan.setPointerCapture(e.pointerId);
+  try { gridCan.setPointerCapture(e.pointerId); } catch { /* synthetic or already-ended pointer */ }
   pushUndo();
   erasing = S.eraser || e.button === 2;
   const p = cellAt(e);
@@ -450,19 +464,32 @@ let actx = null, node = null, fx = null, analyser = null, audioInit = null;
 
 function fxParams() { return { ...S.fx, bpm: S.bpm }; }
 
+function makeSynth(ctx, extra) {
+  return new AudioWorkletNode(ctx, 'spectral-synth', {
+    numberOfInputs: 0,
+    numberOfOutputs: 3,
+    outputChannelCount: [2, 2, 1],
+    processorOptions: {
+      grid: S.grid.slice(), C: S.C, bpm: S.bpm,
+      smear: S.fx.smear, swirl: S.fx.swirl, pump: S.fx.pump, ...extra,
+    },
+  });
+}
+function wire(n, f, ctx) {
+  n.connect(f.input, 0);
+  n.connect(f.drums, 1);
+  n.connect(f.pump, 2);
+  f.output.connect(ctx.destination);
+}
+
 function initAudio() {
   if (audioInit) return audioInit;
   audioInit = (async () => {
     await actx.audioWorklet.addModule(WORKLET_URL);
-    node = new AudioWorkletNode(actx, 'spectral-synth', {
-      numberOfInputs: 0,
-      outputChannelCount: [2],
-      processorOptions: { grid: S.grid.slice(), C: S.C, bpm: S.bpm, smear: S.fx.smear, swirl: S.fx.swirl },
-    });
+    node = makeSynth(actx, {});
     fx = buildFX(actx);
     fx.set(fxParams(), true);
-    node.connect(fx.input);
-    fx.output.connect(actx.destination);
+    wire(node, fx, actx);
     analyser = fx.analyser;
     node.port.onmessage = (e) => {
       if (e.data.pos === undefined) return;
@@ -474,7 +501,7 @@ function initAudio() {
 }
 
 function sendParams() {
-  if (node) node.port.postMessage({ type: 'params', bpm: S.bpm, smear: S.fx.smear, swirl: S.fx.swirl });
+  if (node) node.port.postMessage({ type: 'params', bpm: S.bpm, smear: S.fx.smear, swirl: S.fx.swirl, pump: S.fx.pump });
   if (fx) fx.set(fxParams());
   scheduleSave();
 }
@@ -510,18 +537,10 @@ async function exportWav() {
     const loopSec = (S.C / COLS_PER_BEAT) * (60 / S.bpm);
     const oc = new OfflineAudioContext(2, Math.ceil(sr * (loopSec * 2 + 3)), sr);
     await oc.audioWorklet.addModule(WORKLET_URL);
-    const n = new AudioWorkletNode(oc, 'spectral-synth', {
-      numberOfInputs: 0,
-      outputChannelCount: [2],
-      processorOptions: {
-        grid: S.grid.slice(), C: S.C, bpm: S.bpm,
-        smear: S.fx.smear, swirl: S.fx.swirl, playing: true, loops: 2,
-      },
-    });
+    const n = makeSynth(oc, { playing: true, loops: 2 });
     const f = buildFX(oc);
     f.set(fxParams(), true);
-    n.connect(f.input);
-    f.output.connect(oc.destination);
+    wire(n, f, oc);
     const buf = await oc.startRendering();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(encodeWav(buf));
@@ -606,15 +625,35 @@ function buildUI() {
     changed();
   });
   $('wav').addEventListener('click', exportWav);
+  $('impala').addEventListener('click', () => {
+    pushUndo();
+    Object.assign(S, { bpm: 96, root: 9, scale: 'dorian', snap: true });
+    Object.assign(S.fx, { smear: 0.45, swirl: 0.4, trip: 0.55, echo: 0.3, space: 0.5, pump: 0.65, wobble: 0.45, sweep: 0.45 });
+    impalaPattern(S.grid, S.C, S.root, S.scale);
+    syncControls();
+    selectLayer(PAD_LAYER);
+    sendParams();
+    drawKeys();
+    changed();
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.target.closest('input, select, textarea')) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); undo(); }
     else if (e.key === 'e' || e.key === 'E') setEraser(!S.eraser);
-    else if (e.key >= '1' && e.key <= '6') selectLayer(+e.key - 1);
+    else if (e.key >= '1' && e.key <= String(LAYERS)) selectLayer(+e.key - 1);
   });
   window.addEventListener('resize', layout);
+}
+
+// reflect S in the form controls after a preset changes it
+function syncControls() {
+  $('bpm').value = S.bpm;
+  $('root').value = S.root;
+  $('scale').value = S.scale;
+  $('snap').checked = S.snap;
+  for (const el of document.querySelectorAll('[data-fx]')) el.value = S.fx[el.dataset.fx];
 }
 
 function selectLayer(i) {

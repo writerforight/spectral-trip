@@ -25,6 +25,7 @@
         <select id="bars"><option>1</option><option>2</option><option selected>4</option><option>8</option></select>
       </label>
       <button id="dream" class="btn" title="Generate a new loop in this scale">✺ Dream</button>
+      <button id="impala" class="btn impala" title="Currents-style loop: pad chords, fuzz bass, pumping drums">◐ Impala</button>
       <button id="undo" class="btn" title="Z">↶ Undo</button>
       <button id="clear" class="btn">Clear</button>
       <button id="wav" class="btn">⤓ WAV</button>
@@ -45,6 +46,7 @@
           <button data-shape="line">Line</button>
           <button data-shape="wave">Wave</button>
           <button data-shape="spray">Spray</button>
+          <button data-shape="chord" title="Paints a 7th chord from the scale">Chord</button>
         </div>
         <label class="slider">Size <input id="size" type="range" min="0" max="6" step="1" value="1"><output></output></label>
         <label class="slider">Intensity <input id="intensity" type="range" min="0.1" max="1" step="0.05" value="0.8"><output></output></label>
@@ -77,13 +79,16 @@
           <span class="mirror-label">live output</span>
         </div>
       </div>
-      <div class="status"><span id="hover">—</span><span class="hint">Space play · 1–6 colour · E eraser · Z undo · right-drag erases</span></div>
+      <div class="status"><span id="hover">—</span><span class="hint">Space play · 1–8 colour · E eraser · Z undo · right-drag erases</span></div>
       <div class="fx">
         <label class="knob">Smear <input data-fx="smear" type="range" min="0" max="1" step="0.01" value="0.2"><small>gate ↔ swell</small></label>
         <label class="knob">Swirl <input data-fx="swirl" type="range" min="0" max="1" step="0.01" value="0.35"><small>stereo spin</small></label>
         <label class="knob">Trip <input data-fx="trip" type="range" min="0" max="1" step="0.01" value="0.4"><small>phaser</small></label>
         <label class="knob">Echo <input data-fx="echo" type="range" min="0" max="1" step="0.01" value="0.3"><small>ping-pong</small></label>
         <label class="knob">Space <input data-fx="space" type="range" min="0" max="1" step="0.01" value="0.45"><small>reverb</small></label>
+        <label class="knob">Pump <input data-fx="pump" type="range" min="0" max="1" step="0.01" value="0.35"><small>sidechain to kick</small></label>
+        <label class="knob">Wobble <input data-fx="wobble" type="range" min="0" max="1" step="0.01" value="0.25"><small>tape + flanger</small></label>
+        <label class="knob">Sweep <input data-fx="sweep" type="range" min="0" max="1" step="0.01" value="0"><small>filter, 2 bars</small></label>
         <label class="knob">Volume <input data-fx="volume" type="range" min="0" max="1" step="0.01" value="0.8"><small>master</small></label>
       </div>
     </section>

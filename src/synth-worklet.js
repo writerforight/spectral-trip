@@ -1,11 +1,12 @@
 // Spectral synth: reads the painted grid column by column and turns every lit cell
 // into a voice. Layer = timbre, row = semitone, cell value = loudness.
 // Runs in an AudioWorklet (live) and in an OfflineAudioContext (WAV export).
+// Outputs: 0 = melodic voices (stereo), 1 = drums (stereo), 2 = sidechain "pump" gain (mono).
 
-const ROWS = 84, LAYERS = 6, F0 = 32.70319566, HIT = 5;
+const ROWS = 84, LAYERS = 8, F0 = 32.70319566, HIT = 7;
 const COLS_PER_BEAT = 8;
 const TBL = 2048;
-const LAYER_GAIN = [0.8, 0.9, 0.75, 0.7, 1.0];
+const LAYER_GAIN = [0.8, 0.9, 0.75, 0.7, 1.0, 0.6, 0.9];
 
 function table(fn) {
   const t = new Float32Array(TBL + 1);
@@ -85,6 +86,11 @@ class SpectralSynth extends AudioWorkletProcessor {
     this.ph2 = new Float64Array(N);
     this.amp = new Float32Array(N);
     this.env = new Float32Array(128);
+    this.ph3 = new Float64Array(N);
+    this.lpL = new Float32Array(N);
+    this.lpR = new Float32Array(N);
+    this.pump = o.pump ?? 0;
+    this.pumpT = 9;
 
     // percussion state per row
     this.hT = new Float32Array(ROWS).fill(9);
@@ -115,6 +121,7 @@ class SpectralSynth extends AudioWorkletProcessor {
       if (d.bpm) this.bpm = d.bpm;
       if (d.smear !== undefined) this.smear = d.smear;
       if (d.swirl !== undefined) this.swirl = d.swirl;
+      if (d.pump !== undefined) this.pump = d.pump;
     } else if (d.type === 'play') {
       this.playing = true; this.pos = d.pos || 0; this.lastCol = -1;
     } else if (d.type === 'stop') {
@@ -130,6 +137,7 @@ class SpectralSynth extends AudioWorkletProcessor {
       const a = G[b + col];
       if (a > 0.01 && G[b + prev] < 0.01) {
         this.hT[r] = 0; this.hA[r] = a; this.hPh[r] = 0;
+        if (r < 24) this.pumpT = 0;     // kicks drive the sidechain
       }
     }
   }
@@ -187,6 +195,38 @@ class SpectralSynth extends AudioWorkletProcessor {
         ph += inc; if (ph >= 1) ph -= 1;
         L[i + k] += s * gl; R[i + k] += s * gr;
       }
+    } else if (l === 5) {
+      // Pad: three detuned saws spread L/C/R, softened by a one-pole low-pass (Juno-ish)
+      const T = this.saw[Math.min(6, (r / 12) | 0)];
+      const i1 = inc * 1.0045, i2 = inc * 0.9955;
+      const a = 1 - Math.exp((-2 * Math.PI * Math.min(this.freq[r] * 5, 3200)) / sampleRate);
+      let ph3 = this.ph3[vi], yl = this.lpL[vi], yr = this.lpR[vi];
+      const k2 = Math.SQRT2;
+      for (let k = 0; k < len; k++) {
+        const c = lk(T, ph3) * 0.6;
+        yl += (lk(T, ph) + c - yl) * a;
+        yr += (lk(T, ph2) + c - yr) * a;
+        ph += i1; if (ph >= 1) ph -= 1;
+        ph2 += i2; if (ph2 >= 1) ph2 -= 1;
+        ph3 += inc; if (ph3 >= 1) ph3 -= 1;
+        L[i + k] += yl * env[k] * g * k2 * 0.7;
+        R[i + k] += yr * env[k] * g * k2 * 0.7;
+      }
+      this.ph3[vi] = ph3; this.lpL[vi] = yl; this.lpR[vi] = yr;
+    } else if (l === 6) {
+      // Fuzz bass: driven sine + a bit of square, tanh, then rounded off
+      const T = this.sq[Math.min(6, (r / 12) | 0)];
+      const a = 1 - Math.exp((-2 * Math.PI * Math.min(this.freq[r] * 6, 1100)) / sampleRate);
+      let y = this.lpL[vi];
+      const gc = g * 1.3;
+      for (let k = 0; k < len; k++) {
+        const ev = env[k];
+        const x = (lk(SIN, ph) * 2.2 + lk(T, ph) * 0.5) * (0.6 + ev);
+        y += (Math.tanh(x) * 0.75 - y) * a;
+        ph += inc; if (ph >= 1) ph -= 1;
+        L[i + k] += y * ev * gc; R[i + k] += y * ev * gc;
+      }
+      this.lpL[vi] = y;
     } else {
       const b0 = this.bpB0[r], a1c = this.bpA1[r], a2c = this.bpA2[r], G = this.bpG[r];
       let x1 = this.bx1[r], x2 = this.bx2[r], y1 = this.by1[r], y2 = this.by2[r];
@@ -204,7 +244,7 @@ class SpectralSynth extends AudioWorkletProcessor {
 
   renderHit(r, i, len, L, R) {
     const sr = sampleRate, dt = 1 / sr, f = this.freq[r];
-    const A = this.hA[r] * 0.5;
+    const A = this.hA[r] * 0.38;
     const pan = (r / ROWS - 0.5) * 0.5;
     const th = ((pan + 1) * Math.PI) / 4, gl = Math.cos(th) * A, gr = Math.sin(th) * A;
     let t = this.hT[r], ph = this.hPh[r], prev = this.hN[r];
@@ -231,6 +271,8 @@ class SpectralSynth extends AudioWorkletProcessor {
 
   process(_inputs, outputs) {
     const out = outputs[0], L = out[0], R = out[1] || out[0], n = L.length;
+    const dOut = outputs[1] || out, DL = dOut[0], DR = dOut[1] || dOut[0];
+    const P = outputs[2] && outputs[2][0];
     const C = this.C, G = this.grid;
     const spc = (sampleRate * 60) / this.bpm / COLS_PER_BEAT;
     const e = Math.max(0.02, this.smear), dfr = 1 / spc;
@@ -260,7 +302,7 @@ class SpectralSynth extends AudioWorkletProcessor {
           this.renderVoice(l, r, i, len, a0, a1, frac, dfr, e, L, R);
         }
       }
-      for (let r = 0; r < ROWS; r++) if (this.hT[r] < 2) this.renderHit(r, i, len, L, R);
+      for (let r = 0; r < ROWS; r++) if (this.hT[r] < 2) this.renderHit(r, i, len, DL, DR);
 
       // loudness normaliser: many voices → each a bit quieter
       const target = 1 / Math.sqrt(Math.max(1, weight / 4));
@@ -274,6 +316,18 @@ class SpectralSynth extends AudioWorkletProcessor {
         }
       }
       i += len;
+    }
+
+    // sidechain: dip right after each kick, swell back over ~half a beat
+    if (P) {
+      const pump = this.pump, rel = (60 / this.bpm) * 0.2, dt = 1 / sampleRate;
+      let t = this.pumpT;
+      for (let k = 0; k < n; k++) {
+        const d = t < 0.004 ? t / 0.004 : Math.exp(-(t - 0.004) / rel);
+        P[k] = 1 - pump * 0.85 * d;
+        t += dt;
+      }
+      this.pumpT = Math.min(t, 9);
     }
 
     this.postCount += n;

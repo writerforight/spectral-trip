@@ -14,16 +14,20 @@ A psychedelic sound lab in the browser: **paint colours onto a spectrogram and t
 | Bell (lime) | FM bell, metallic and inharmonic |
 | Hollow (orange) | odd harmonics, woody |
 | Breath (violet) | band of noise: wind, sizzle |
+| Pad (gold) | Juno-style pad: three detuned saws, warm and wide |
+| Bass (blue) | fuzz bass: driven sine, round |
 | Pulse (red) | drums: low rows kick, middle snare, high hats |
 
 - **Brightness = loudness.** Overlapping colours add up, visually and sonically.
-- Brushes: dot, line, wave (vibrato squiggles), spray. Symmetry: mirror time, mirror pitch, repeat every beat/bar.
+- Brushes: dot, line, wave (vibrato squiggles), spray, chord (a 7th chord stacked inside the scale). Symmetry: mirror time, mirror pitch, repeat every beat/bar.
 - Scale snapping (Hijaz, minor pentatonic, dorian, whole tone, major, chromatic) keeps everything in tune.
-- FX: Smear (gated ↔ swelling notes), Swirl (rotating stereo), Trip (phaser), Echo (ping-pong), Space (reverb).
+- FX: Smear (gated ↔ swelling notes), Swirl (rotating stereo), Trip (phaser), Echo (ping-pong), Space (reverb),
+  Pump (everything ducks on the kick), Wobble (tape wow/flutter + flanger), Sweep (resonant filter, one sweep per two bars).
+- ◐ Impala loads a Currents-style loop: 96 BPM, A dorian, pad chords, busy fuzz bass, pumping drums, wobble and sweep on.
 - ✺ Dream generates a fresh loop in the current scale. ⤓ WAV renders two loops to a file.
 - The right-hand strip is the **live output spectrogram** on the same pitch axis as the canvas.
 
-Keys: `Space` play/stop · `1`–`6` colour · `E` eraser · `Z` undo · right-drag erases.
+Keys: `Space` play/stop · `1`–`8` colour · `E` eraser · `Z` undo · right-drag erases.
 
 Everything is synthesised live in an AudioWorklet; no samples, no build step, no dependencies.
 Your last pattern is kept in the browser's local storage.
