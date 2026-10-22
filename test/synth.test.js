@@ -1,7 +1,7 @@
 // Headless check of the synth: mock the AudioWorklet globals, render the Dream loop.
 import { readFileSync } from 'node:fs';
-import { dreamPattern, impalaPattern, arpPattern, harmonicNote, ARP_BPM } from '../src/patterns.js';
-import { ROWS, LAYERS, COLS_PER_BAR, HIT_LAYER, chordRows, rowFreq } from '../src/model.js';
+import { dreamPattern, impalaPattern, arpPattern, harmonicNote, randomArp, arpName, ARP_RECIPE, ARP_BPM } from '../src/patterns.js';
+import { ROWS, LAYERS, COLS_PER_BAR, HIT_LAYER, chordRows, rowFreq, inScale } from '../src/model.js';
 
 let Proc;
 globalThis.sampleRate = 48000;
@@ -78,6 +78,29 @@ for (let l = 0; l < LAYERS; l++) for (let r = 0; r < ROWS; r++) if (rowFreq(r) <
 check(low === 0, 'arp: nothing below 60 Hz');
 const sa = stats(render(arp, C, 6, { bpm: ARP_BPM, smear: 0.6 }).L);
 check(sa.bad === 0 && sa.rms > 0.01 && sa.pk < 1.5, `arp loop sounds (rms ${sa.rms.toFixed(3)}, peak ${sa.pk.toFixed(2)})`);
+
+check(arpName(ARP_RECIPE) === 'A minor · Am–F–C–G · up-down · 70 BPM', `recipe is Am–F–C–G (${arpName(ARP_RECIPE)})`);
+
+// generated pieces: in key, nothing below 60 Hz, same seed → same piece, new seed → new piece
+const names = new Set();
+let offKey = 0, deep = 0;
+for (let seed = 1; seed <= 40; seed++) {
+  const spec = randomArp(seed * 7919);
+  names.add(arpName(spec));
+  const gg = new Float32Array(LAYERS * ROWS * C);
+  arpPattern(gg, C, spec);
+  // bass, arpeggio and melody fundamentals all sit in the key (harmonics may not)
+  for (const r of [17, 20, 24, 29, 33, 36, 40, 44, 48, 52]) {
+    for (let c = 0; c < C; c += COLS_PER_BAR) if (gg[r * C + c] > 0.3 && !inScale(r, spec.root, spec.scale)) offKey++;
+  }
+  for (let r = 0; r < ROWS && rowFreq(r) < 60; r++) for (let c = 0; c < C; c++) deep += gg[r * C + c];
+}
+check(offKey === 0, `generated pieces stay in key (${offKey} off-key bar starts)`);
+check(deep === 0, 'generated pieces: nothing below 60 Hz');
+check(names.size > 30, `40 seeds → ${names.size} different pieces`);
+const ga = new Float32Array(LAYERS * ROWS * C), gb = new Float32Array(LAYERS * ROWS * C);
+arpPattern(ga, C, randomArp(5)); arpPattern(gb, C, randomArp(5));
+check(ga.every((v, i) => v === gb[i]), 'same seed, same piece');
 
 // chords: A dorian on A3 → A C E G; chromatic → minor 7th
 check(JSON.stringify(chordRows(33, 9, 'dorian')) === JSON.stringify([33, 36, 40, 43]), 'Am7 in A dorian');

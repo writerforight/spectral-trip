@@ -1,14 +1,15 @@
 import {
   ROWS, LAYERS, F0, COLS_PER_BEAT, COLS_PER_BAR, HIT_LAYER,
   LAYER_DEFS, NAMES, SCALES, noteName, inScale, chordRows, PAD_LAYER,
-} from './model.js';
-import { buildFX } from './fx.js';
-import { dreamPattern, impalaPattern, arpPattern, ARP_BPM } from './patterns.js';
-import { encodeWav } from './wav.js';
+} from './model.js?v=5';
+import { buildFX } from './fx.js?v=5';
+import { dreamPattern, impalaPattern, arpPattern, randomArp, arpName, ARP_RECIPE } from './patterns.js?v=5';
+import { encodeWav } from './wav.js?v=5';
 
 const $ = (id) => document.getElementById(id);
-const WORKLET_URL = new URL('./synth-worklet.js', import.meta.url);
+const WORKLET_URL = new URL('./synth-worklet.js?v=5', import.meta.url);
 const STORE = 'spectral-trip-v1';
+const MAX_BARS = 16;
 
 const S = {
   bars: 4,
@@ -86,9 +87,91 @@ function undo() {
   const u = undoStack.pop();
   if (!u) return;
   S.grid = u.grid;
-  if (u.bars !== S.bars) { S.bars = u.bars; S.C = u.bars * COLS_PER_BAR; $('bars').value = S.bars; resizeSource(); }
+  if (u.bars !== S.bars) { S.bars = u.bars; S.C = u.bars * COLS_PER_BAR; $('bars').value = S.bars; resizeSource(); buildChips(); }
   changed();
 }
+
+// ---------------------------------------------------------------- bars
+// The strip under the canvas: select a bar, copy/paste it, duplicate, delete, transpose.
+let sel = 0, clip = null;
+const BAR = COLS_PER_BAR;
+
+function barData(b) {
+  const out = new Float32Array(LAYERS * ROWS * BAR);
+  for (let v = 0; v < LAYERS * ROWS; v++) out.set(S.grid.subarray(v * S.C + b * BAR, v * S.C + (b + 1) * BAR), v * BAR);
+  return out;
+}
+// write a bar's data into bar b, shifted by `shift` semitones (drums stay put: their rows are kinds of hit)
+function writeBar(b, data, shift = 0) {
+  for (let l = 0; l < LAYERS; l++) {
+    for (let r = 0; r < ROWS; r++) {
+      const from = l === HIT_LAYER ? r : r - shift;
+      const dst = (l * ROWS + r) * S.C + b * BAR;
+      if (from < 0 || from >= ROWS) S.grid.fill(0, dst, dst + BAR);
+      else S.grid.set(data.subarray((l * ROWS + from) * BAR, (l * ROWS + from + 1) * BAR), dst);
+    }
+  }
+}
+// rebuild the loop from a list of old bar indices (null = empty bar)
+function arrangeBars(order) {
+  pushUndo();
+  const oldC = S.C, old = S.grid, C = order.length * BAR;
+  const grid = new Float32Array(LAYERS * ROWS * C);
+  for (let v = 0; v < LAYERS * ROWS; v++) {
+    order.forEach((b, k) => { if (b !== null) grid.set(old.subarray(v * oldC + b * BAR, v * oldC + (b + 1) * BAR), v * C + k * BAR); });
+  }
+  S.bars = order.length; S.C = C; S.grid = grid;
+  $('bars').value = S.bars;
+  resizeSource();
+  buildChips();
+  changed();
+}
+const barList = () => Array.from({ length: S.bars }, (_, k) => k);
+
+function selectBar(b) {
+  sel = Math.max(0, Math.min(S.bars - 1, b));
+  $('barChips').querySelectorAll('button[data-bar]').forEach((el) => el.classList.toggle('on', +el.dataset.bar === sel));
+}
+function buildChips() {
+  const box = $('barChips');
+  box.textContent = '';
+  for (let b = 0; b < S.bars; b++) {
+    const el = document.createElement('button');
+    el.textContent = b + 1;
+    el.dataset.bar = b;
+    el.addEventListener('click', () => selectBar(b));
+    box.appendChild(el);
+  }
+  $('barAdd').disabled = $('barDup').disabled = S.bars >= MAX_BARS;
+  $('barDel').disabled = S.bars <= 1;
+  selectBar(sel);
+}
+
+const say = (msg) => { $('hover').textContent = msg; };
+function copyBar() { clip = barData(sel); say(`bar ${sel + 1} copied`); }
+function pasteBar() {
+  if (!clip) { say('copy a bar first'); return; }
+  pushUndo(); writeBar(sel, clip); changed(); say(`pasted onto bar ${sel + 1}`);
+}
+function duplicateBar() {
+  if (S.bars >= MAX_BARS) { say(`at most ${MAX_BARS} bars`); return; }
+  const order = barList();
+  order.splice(sel + 1, 0, sel);
+  arrangeBars(order);
+  selectBar(sel + 1);
+}
+function deleteBar() {
+  if (S.bars <= 1) return;
+  arrangeBars(barList().filter((b) => b !== sel));
+  selectBar(Math.min(sel, S.bars - 1));
+}
+function addBar() {
+  if (S.bars >= MAX_BARS) return;
+  arrangeBars([...barList(), null]);
+  selectBar(S.bars - 1);
+}
+function clearBar() { pushUndo(); writeBar(sel, new Float32Array(LAYERS * ROWS * BAR)); changed(); }
+function transposeBar(st) { pushUndo(); writeBar(sel, barData(sel), st); changed(); say(`bar ${sel + 1} ${st > 0 ? '▲ +' : '▼ '}${st} semitone${Math.abs(st) > 1 ? 's' : ''}`); }
 
 // ---------------------------------------------------------------- painting
 function snapRow(r) {
@@ -213,6 +296,8 @@ function layout() {
     cv.height = Math.round(H * dpr);
   }
   mirCan.parentElement.style.display = MW ? '' : 'none';
+  $('barChips').style.marginLeft = KW + 1 + 'px';
+  $('barChips').style.width = W + 'px';
   glowCan.width = gridCan.width; glowCan.height = gridCan.height;
   imgDirty = true;
   drawKeys();
@@ -312,6 +397,12 @@ function drawGrid(now) {
       : c % COLS_PER_BEAT === 0 ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.025)';
     g.fillRect(Math.round(c * cw), 0, 1, H);
   }
+
+  // selected bar
+  g.fillStyle = 'rgba(46,230,255,0.05)';
+  g.fillRect(sel * BAR * cw, 0, BAR * cw, H);
+  g.fillStyle = 'rgba(46,230,255,0.7)';
+  g.fillRect(sel * BAR * cw, 0, BAR * cw, 2);
 
   g.globalCompositeOperation = 'lighter';
   g.globalAlpha = 0.9;
@@ -416,6 +507,7 @@ function cellAt(e) {
   };
 }
 let drawing = false, last = null, start = null;
+let moving = null;   // Move tool: { bar, data, r0, shift }
 
 gridCan.addEventListener('contextmenu', (e) => e.preventDefault());
 gridCan.addEventListener('pointerdown', (e) => {
@@ -424,6 +516,11 @@ gridCan.addEventListener('pointerdown', (e) => {
   pushUndo();
   erasing = S.eraser || e.button === 2;
   const p = cellAt(e);
+  if (S.shape === 'move' && !erasing) {
+    selectBar(Math.floor(Math.max(0, p.c) / BAR));
+    moving = { bar: sel, data: barData(sel), r0: p.r, shift: 0 };
+    return;
+  }
   drawing = true; last = p; start = p; waveOrigin = p.c;
   if (S.shape === 'line') preview = [p, p];
   else if (S.shape === 'spray') spray(p);
@@ -434,6 +531,16 @@ gridCan.addEventListener('pointermove', (e) => {
   const p = cellAt(e);
   hover = { c: Math.round(p.c), r: Math.round(p.r) };
   showHover(hover);
+  if (moving) {
+    const shift = Math.round(p.r - moving.r0);
+    if (shift !== moving.shift) {
+      moving.shift = shift;
+      writeBar(moving.bar, moving.data, shift);
+      changed();
+    }
+    say(`bar ${moving.bar + 1} · ${shift > 0 ? '+' : ''}${shift} semitones`);
+    return;
+  }
   if (!drawing) return;
   if (S.shape === 'line') preview[1] = p;
   else if (S.shape === 'spray') spray(p);
@@ -442,6 +549,7 @@ gridCan.addEventListener('pointermove', (e) => {
   if (S.shape !== 'line') changed();
 });
 function endStroke(e) {
+  moving = null;
   if (!drawing) return;
   if (S.shape === 'line' && preview) { segment(start, cellAt(e)); changed(); }
   preview = null; drawing = false; erasing = false;
@@ -571,9 +679,11 @@ function buildUI() {
 
   for (const b of $('shapes').querySelectorAll('button')) {
     b.classList.toggle('on', b.dataset.shape === S.shape);
+    gridCan.classList.toggle('move', S.shape === 'move');
     b.addEventListener('click', () => {
       S.shape = b.dataset.shape;
       for (const o of $('shapes').querySelectorAll('button')) o.classList.toggle('on', o === b);
+      gridCan.classList.toggle('move', S.shape === 'move');
       scheduleSave();
     });
   }
@@ -608,7 +718,17 @@ function buildUI() {
     $('bpm').value = S.bpm;
     sendParams();
   });
+  for (let b = 1; b <= MAX_BARS; b++) $('bars').add(new Option(b, b));
   $('bars').value = S.bars;
+  buildChips();
+  $('barCopy').addEventListener('click', copyBar);
+  $('barPaste').addEventListener('click', pasteBar);
+  $('barDup').addEventListener('click', duplicateBar);
+  $('barDel').addEventListener('click', deleteBar);
+  $('barClear').addEventListener('click', clearBar);
+  $('barAdd').addEventListener('click', addBar);
+  $('barUp').addEventListener('click', (e) => transposeBar(e.shiftKey ? 12 : 1));
+  $('barDown').addEventListener('click', (e) => transposeBar(e.shiftKey ? -12 : -1));
   $('bars').addEventListener('change', () => setBars(+$('bars').value));
 
   for (const el of document.querySelectorAll('[data-fx]')) {
@@ -636,12 +756,16 @@ function buildUI() {
     drawKeys();
     changed();
   });
+  let arpClicks = 0;
   $('arp').addEventListener('click', () => {
-    // one chord per bar: needs at least the four bars of Am–F–C–G
+    // first click: the Am–F–C–G recipe; every click after: a new piece
+    const spec = arpClicks++ ? randomArp((Math.random() * 2 ** 31) | 0) : ARP_RECIPE;
+    // one chord per bar: needs at least the four bars of the progression
     if (S.bars < 4) { setBars(4); $('bars').value = 4; } else pushUndo();
-    Object.assign(S, { bpm: ARP_BPM, root: 9, scale: 'minor', snap: true });
+    Object.assign(S, { bpm: spec.bpm, root: spec.root, scale: spec.scale, snap: true });
     Object.assign(S.fx, { smear: 0.6, swirl: 0.25, trip: 0, echo: 0.2, space: 0.8, pump: 0, wobble: 0.1, sweep: 0 });
-    arpPattern(S.grid, S.C, S.bpm);
+    arpPattern(S.grid, S.C, spec);
+    $('piece').textContent = '☾ ' + arpName(spec);
     syncControls();
     selectLayer(0);
     sendParams();
@@ -654,6 +778,9 @@ function buildUI() {
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); undo(); }
     else if (e.key === 'e' || e.key === 'E') setEraser(!S.eraser);
+    else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v')) { e.preventDefault(); (e.key === 'c' ? copyBar : pasteBar)(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); selectBar(sel + (e.key === 'ArrowLeft' ? -1 : 1)); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); transposeBar((e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1)); }
     else if (e.key >= '1' && e.key <= String(LAYERS)) selectLayer(+e.key - 1);
   });
   window.addEventListener('resize', layout);
@@ -688,6 +815,7 @@ function setBars(bars) {
   }
   S.bars = bars; S.C = C; S.grid = grid;
   resizeSource();
+  buildChips();
   changed();
 }
 

@@ -111,7 +111,7 @@ select option { background: #160c26; }
 .swatch.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
 .eraser.on { border-color: #fff; background: rgba(255, 255, 255, 0.18); }
 
-.seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
 .seg button { padding: 6px 0; font-size: 12px; }
 .seg button.on { border-color: var(--accent); background: rgba(46, 230, 255, 0.16); }
 
@@ -130,6 +130,7 @@ input[type=checkbox] { accent-color: var(--hot); }
 }
 canvas { display: block; }
 #grid { touch-action: none; cursor: crosshair; flex: 1 1 auto; min-width: 0; }
+#grid.move { cursor: ns-resize; }
 #keys { flex: 0 0 auto; border-right: 1px solid var(--line); }
 .mirror-box { position: relative; flex: 0 0 auto; border-left: 1px solid var(--line); }
 .mirror-label {
@@ -142,6 +143,17 @@ canvas { display: block; }
   padding: 8px 4px; color: var(--muted); font-size: 12px;
 }
 #hover { color: var(--text); font-variant-numeric: tabular-nums; }
+#piece { color: var(--hot); }
+
+.barbar { padding-top: 6px; }
+.bar-chips { display: flex; gap: 3px; }
+.bar-chips button {
+  flex: 1 1 0; min-width: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 8px; padding: 4px 0;
+}
+.bar-chips button:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.bar-chips button.on { color: var(--text); border-color: var(--accent); background: rgba(46, 230, 255, 0.16); }
+.bar-tools { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
 
 .fx {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px;
@@ -173,3 +185,4 @@ canvas { display: block; }
   .fx { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hint { display: none; }
 }
+.bar-tools .btn:disabled { cursor: not-allowed; }

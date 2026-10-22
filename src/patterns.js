@@ -1,5 +1,5 @@
 // "Dream" generator: fills the grid with a playable psychedelic loop in the current scale.
-import { ROWS, SCALES, COLS_PER_BAR, PAD_LAYER, BASS_LAYER, HIT_LAYER, chordRows } from './model.js';
+import { ROWS, SCALES, NAMES, COLS_PER_BAR, PAD_LAYER, BASS_LAYER, HIT_LAYER, chordRows } from './model.js?v=5';
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -109,12 +109,69 @@ export function impalaPattern(grid, C, root, scale) {
   }
 }
 
-// "Arpeggio": a hand-drawn spectrogram. Am–F–C–G, one chord per bar at 70 BPM (eighths 0.43 s apart).
+// "Arpeggio": a hand-drawn spectrogram. One chord per bar, arpeggiated in eighths (0.43 s apart at 70 BPM).
 // Every note is a sine line plus its 2f…5f harmonics as their own rows: each harmonic is fainter
 // than the one below and dies away faster, so a note rings 3–5 s and thins into a soft tail.
-// Sparse melody (A4 C5 E5, 2–3 s each) on top, a very faint root bass, a faint 2–4 kHz hiss band.
+// Sparse melody (2–3 s notes) on top, a very faint root bass, a faint 2–4 kHz hiss band.
+// ARP_RECIPE is the original Am–F–C–G piece; randomArp(seed) rolls a new one.
 export const ARP_BPM = 70;
 const HARM = [0, 12, 19, 24, 28];           // f, 2f, 3f, 4f, 5f in semitones
+
+export const ARP_RECIPE = {
+  bpm: ARP_BPM, root: 9, scale: 'minor',
+  prog: [0, 5, 2, 6],                       // i–VI–III–VII: Am F C G
+  sevenths: false,
+  shape: [0, 1, 2, 1, 0, 1, 2, 1],          // chord-tone index per eighth; ≥ tones wraps up an octave
+  shapeName: 'up-down',
+  // per bar: [col, row, hold seconds] — A4=45 C5=48 E5=52
+  melody: [[[0, 52, 2.6]], [[8, 48, 2.2], [24, 45, 2.0]], [[4, 52, 2.8]], [[8, 45, 2.4]]],
+};
+
+const PROGS = {
+  minor: [[0, 5, 2, 6], [0, 3, 6, 2], [0, 6, 5, 6], [0, 5, 3, 4], [0, 2, 6, 3], [0, 3, 0, 4], [0, 5, 0, 6]],
+  major: [[0, 4, 5, 3], [0, 5, 3, 4], [5, 3, 0, 4], [3, 4, 2, 5], [0, 3, 5, 4], [0, 2, 3, 4]],
+};
+const SHAPES = {
+  'up-down': [0, 1, 2, 1, 0, 1, 2, 1],
+  'up': [0, 1, 2, 0, 1, 2, 0, 1],
+  'rolling': [0, 1, 2, 3, 2, 1, 2, 3],
+  'alberti': [0, 2, 1, 2, 0, 2, 1, 2],
+  'falling': [3, 2, 1, 2, 3, 2, 1, 0],
+  'wide': [0, 2, 4, 2, 1, 3, 5, 3],
+};
+
+// chord on scale degree d: rows of root, third, fifth (and seventh), root placed in F3…E4
+function chordAt(spec, d) {
+  const steps = SCALES[spec.scale].steps, n = steps.length;
+  const pc = (k) => (spec.root + steps[(d + k) % n]) % 12;
+  const root = 29 + ((pc(0) - 29 % 12 + 12) % 12);
+  const ks = spec.sevenths ? [0, 2, 4, 6] : [0, 2, 4];
+  return ks.map((k) => root + ((pc(k) - pc(0) + 12) % 12));
+}
+
+export function chordName(rows) {
+  const third = rows[1] - rows[0], fifth = rows[2] - rows[0];
+  const q = fifth === 6 ? 'dim' : third === 3 ? 'm' : '';
+  const sev = rows[3] === undefined ? '' : rows[3] - rows[0] === 11 ? 'maj7' : '7';
+  return NAMES[rows[0] % 12] + (q === 'm' && sev === 'maj7' ? 'm(maj7)' : q + sev);
+}
+
+export function arpName(spec) {
+  const chords = spec.prog.map((d) => chordName(chordAt(spec, d))).join('–');
+  return `${NAMES[spec.root]} ${spec.scale} · ${chords} · ${spec.shapeName} · ${spec.bpm} BPM`;
+}
+
+export function randomArp(seed) {
+  const R = rng(seed);
+  const pick = (a) => a[Math.floor(R() * a.length)];
+  const scale = R() < 0.6 ? 'minor' : 'major';
+  const shapeName = pick(Object.keys(SHAPES));
+  return {
+    bpm: 62 + Math.floor(R() * 19), root: Math.floor(R() * 12), scale,
+    prog: pick(PROGS[scale]), sevenths: R() < 0.3,
+    shape: SHAPES[shapeName], shapeName, seed,
+  };
+}
 
 // One note on the Glass layer: row r and its harmonics from column c0. `at` writes a cell (max-merge).
 // hold: seconds at a slowly drooping full level, fade: seconds for the fundamental to die out.
@@ -132,25 +189,34 @@ export function harmonicNote(at, C, cps, r, c0, amp, fade, hold = 0) {
   }
 }
 
-export function arpPattern(grid, C, bpm = ARP_BPM) {
-  const { at } = tools(grid, C, 9, 'minor');
-  const cps = (bpm / 60) * 8;               // columns per second
+export function arpPattern(grid, C, spec = ARP_RECIPE) {
+  const { at } = tools(grid, C, spec.root, spec.scale);
+  const cps = (spec.bpm / 60) * 8;          // columns per second
   const bars = C / COLS_PER_BAR;
   const note = (r, c0, amp, fade, hold) => harmonicNote(at, C, cps, r, c0, amp, fade, hold);
-
-  // rows: A3=33 C4=36 E4=40 F3=29 G4=43 G3=31 B3=35 D4=38 · bass A2=21 F2=17 C3=24 G2=19
-  const chords = [[33, 36, 40], [29, 33, 36], [36, 40, 43], [31, 35, 38]];
-  const roots = [21, 17, 24, 19];
-  const shape = [0, 1, 2, 1, 0, 1, 2, 1];
-  // melody per bar: [col, row, hold seconds] — A4=45 C5=48 E5=52
-  const melody = [[[0, 52, 2.6]], [[8, 48, 2.2], [24, 45, 2.0]], [[4, 52, 2.8]], [[8, 45, 2.4]]];
+  const R = rng(spec.seed || 1);
 
   for (let b = 0; b < bars; b++) {
-    const i = b % 4, c0 = b * COLS_PER_BAR;
-    shape.forEach((n, e) => note(chords[i][n], c0 + e * 4, e === 0 ? 0.8 : 0.68, 3.2 + ((e * 7 + i * 3) % 5) * 0.35));
-    for (const [c, r, hold] of melody[i]) note(r, c0 + c, 0.95, 3.5, hold);
-    // bass: plain sine, very faint, held through the bar and fading out under the next one
-    for (let j = 0; j < 44; j++) at(0, roots[i], c0 + j, j < 32 ? 0.24 - 0.004 * j : 0.11 * Math.exp(-(j - 32) / 5));
+    const i = b % spec.prog.length, c0 = b * COLS_PER_BAR;
+    const tones = chordAt(spec, spec.prog[i]), n = tones.length;
+    spec.shape.forEach((k, e) => {
+      const r = tones[k % n] + 12 * Math.floor(k / n);
+      note(r, c0 + e * 4, e === 0 ? 0.8 : 0.68, 3.2 + ((e * 7 + i * 3) % 5) * 0.35);
+    });
+
+    // melody: 1–2 long notes per bar on chord tones between G♯4 and G♯5
+    let mel = spec.melody && spec.melody[b % spec.melody.length];
+    if (!mel) {
+      const high = [];
+      for (let r = 44; r <= 56; r++) if (tones.some((t) => (r - t) % 12 === 0)) high.push(r);
+      const pickRow = () => high[Math.floor(R() * high.length)];
+      mel = [[[0, 4, 8][Math.floor(R() * 3)], pickRow(), 2 + R() * 0.8]];
+      if (R() < 0.5) mel.push([[16, 20, 24][Math.floor(R() * 3)], pickRow(), 2 + R() * 0.6]);
+    }
+    for (const [c, r, hold] of mel) note(r, c0 + c, 0.95, 3.5, hold);
+
+    // bass: plain sine an octave under the chord root, very faint, fading out under the next bar
+    for (let j = 0; j < 44; j++) at(0, tones[0] - 12, c0 + j, j < 32 ? 0.24 - 0.004 * j : 0.11 * Math.exp(-(j - 32) / 5));
   }
 
   // hiss: a very faint, steady band from C7 (2.1 kHz) to the top of the grid

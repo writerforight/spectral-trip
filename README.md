@@ -24,12 +24,15 @@ A psychedelic sound lab in the browser: **paint colours onto a spectrogram and t
 - FX: Smear (gated ↔ swelling notes), Swirl (rotating stereo), Trip (phaser), Echo (ping-pong), Space (reverb),
   Pump (everything ducks on the kick), Wobble (tape wow/flutter + flanger), Sweep (resonant filter, one sweep per two bars).
 - ◐ Impala loads a Currents-style loop: 96 BPM, A dorian, pad chords, busy fuzz bass, pumping drums, wobble and sweep on.
-- ☾ Arpeggio loads a drawn-spectrogram loop: Am–F–C–G arpeggio at 70 BPM (eighths 0.43 s apart), every note a sine plus its 2f–5f
-  harmonics (each fainter and shorter-lived), sparse A4/C5/E5 melody, a very faint root bass and a faint 2–4 kHz hiss band, big reverb.
+- ☾ Arpeggio loads a drawn-spectrogram loop: every note a sine plus its 2f–5f harmonics (each fainter and shorter-lived), one chord per bar
+  arpeggiated in eighths, sparse long melody notes, a very faint root bass and a faint 2–4 kHz hiss band, big reverb.
+  The first click plays Am–F–C–G at 70 BPM; every click after rolls a new piece (key, progression, arpeggio shape, sevenths, tempo).
+- **Bars**: the strip under the canvas selects a bar (`←` `→`). Copy / Paste (`Ctrl/⌘ C` / `V`) a bar onto another, Duplicate, Delete,
+  + Bar (up to 16), transpose with ▲ ▼ (`↑` `↓`, Shift = octave), or pick ✥ Move and drag a bar up or down in pitch. Drums never transpose.
 - ✺ Dream generates a fresh loop in the current scale. ⤓ WAV renders two loops to a file.
 - The right-hand strip is the **live output spectrogram** on the same pitch axis as the canvas.
 
-Keys: `Space` play/stop · `1`–`8` colour · `E` eraser · `Z` undo · right-drag erases.
+Keys: `Space` play/stop · `1`–`8` colour · `E` eraser · `Z` undo · right-drag erases · `←` `→` bar · `↑` `↓` transpose bar.
 
 Everything is synthesised live in an AudioWorklet; no samples, no build step, no dependencies.
 Your last pattern is kept in the browser's local storage.

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <div class="bg" aria-hidden="true"></div>
@@ -22,11 +22,11 @@
       <button id="play" class="btn primary" title="Space">▶ Play</button>
       <label class="field">BPM <input id="bpm" type="number" min="50" max="200" value="112"></label>
       <label class="field">Bars
-        <select id="bars"><option>1</option><option>2</option><option selected>4</option><option>8</option></select>
+        <select id="bars"></select>
       </label>
       <button id="dream" class="btn" title="Generate a new loop in this scale">✺ Dream</button>
       <button id="impala" class="btn impala" title="Currents-style loop: pad chords, fuzz bass, pumping drums">◐ Impala</button>
-      <button id="arp" class="btn arp" title="Am–F–C–G arpeggio at 70 BPM: every note with its 2f–5f harmonics, sparse melody, faint bass and hiss">☾ Arpeggio</button>
+      <button id="arp" class="btn arp" title="Harmonic arpeggio piece: first click Am–F–C–G, every click after rolls a new one">☾ Arpeggio</button>
       <button id="undo" class="btn" title="Z">↶ Undo</button>
       <button id="clear" class="btn">Clear</button>
       <button id="wav" class="btn">⤓ WAV</button>
@@ -48,6 +48,7 @@
           <button data-shape="wave">Wave</button>
           <button data-shape="spray">Spray</button>
           <button data-shape="chord" title="Paints a 7th chord from the scale">Chord</button>
+          <button data-shape="move" title="Grab a bar and drag it up or down in pitch">✥ Move</button>
         </div>
         <label class="slider">Size <input id="size" type="range" min="0" max="6" step="1" value="1"><output></output></label>
         <label class="slider">Intensity <input id="intensity" type="range" min="0.1" max="1" step="0.05" value="0.8"><output></output></label>
@@ -80,7 +81,20 @@
           <span class="mirror-label">live output</span>
         </div>
       </div>
-      <div class="status"><span id="hover">—</span><span class="hint">Space play · 1–8 colour · E eraser · Z undo · right-drag erases</span></div>
+      <div class="barbar">
+        <div id="barChips" class="bar-chips"></div>
+        <div class="bar-tools">
+          <button id="barCopy" class="btn small" title="Ctrl/⌘ C">⧉ Copy</button>
+          <button id="barPaste" class="btn small" title="Ctrl/⌘ V · paste onto the selected bar">⎘ Paste</button>
+          <button id="barDup" class="btn small" title="Insert a copy right after this bar">⊕ Duplicate</button>
+          <button id="barUp" class="btn small" title="↑ · Shift = octave">▲</button>
+          <button id="barDown" class="btn small" title="↓ · Shift = octave">▼</button>
+          <button id="barClear" class="btn small">Clear bar</button>
+          <button id="barDel" class="btn small" title="Remove this bar">✕ Delete</button>
+          <button id="barAdd" class="btn small" title="Add an empty bar at the end">+ Bar</button>
+        </div>
+      </div>
+      <div class="status"><span id="hover">—</span><span id="piece"></span><span class="hint">Space play · 1–8 colour · E eraser · Z undo · right-drag erases · ←→ bar · ↑↓ transpose</span></div>
       <div class="fx">
         <label class="knob">Smear <input data-fx="smear" type="range" min="0" max="1" step="0.01" value="0.2"><small>gate ↔ swell</small></label>
         <label class="knob">Swirl <input data-fx="swirl" type="range" min="0" max="1" step="0.01" value="0.35"><small>stereo spin</small></label>
@@ -95,6 +109,7 @@
     </section>
   </main>
 
-  <script type="module" src="src/main.js"></script>
+  <!-- bump ?v= on every release (here, in src/*.js imports and the worklet URL) so browsers skip stale cached files -->
+  <script type="module" src="src/main.js?v=5"></script>
 </body>
 </html>
