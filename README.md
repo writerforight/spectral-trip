@@ -20,10 +20,12 @@ A psychedelic sound lab in the browser: **paint colours onto a spectrogram and t
 
 - **Brightness = loudness.** Overlapping colours add up, visually and sonically.
 - Brushes: dot, line, wave (vibrato squiggles), spray, chord (a 7th chord stacked inside the scale). Symmetry: mirror time, mirror pitch, repeat every beat/bar.
-- Scale snapping (Hijaz, minor pentatonic, dorian, whole tone, major, chromatic) keeps everything in tune.
+- Scale snapping (Hijaz, minor pentatonic, dorian, whole tone, major, natural minor, chromatic) keeps everything in tune.
 - FX: Smear (gated ↔ swelling notes), Swirl (rotating stereo), Trip (phaser), Echo (ping-pong), Space (reverb),
   Pump (everything ducks on the kick), Wobble (tape wow/flutter + flanger), Sweep (resonant filter, one sweep per two bars).
 - ◐ Impala loads a Currents-style loop: 96 BPM, A dorian, pad chords, busy fuzz bass, pumping drums, wobble and sweep on.
+- ☾ Arpeggio loads a drawn-spectrogram loop: Am–F–C–G arpeggio at 70 BPM (eighths 0.43 s apart), every note a sine plus its 2f–5f
+  harmonics (each fainter and shorter-lived), sparse A4/C5/E5 melody, a very faint root bass and a faint 2–4 kHz hiss band, big reverb.
 - ✺ Dream generates a fresh loop in the current scale. ⤓ WAV renders two loops to a file.
 - The right-hand strip is the **live output spectrogram** on the same pitch axis as the canvas.
 

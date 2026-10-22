@@ -1,7 +1,7 @@
 // Headless check of the synth: mock the AudioWorklet globals, render the Dream loop.
 import { readFileSync } from 'node:fs';
-import { dreamPattern, impalaPattern } from '../src/patterns.js';
-import { ROWS, LAYERS, COLS_PER_BAR, HIT_LAYER, chordRows } from '../src/model.js';
+import { dreamPattern, impalaPattern, arpPattern, harmonicNote, ARP_BPM } from '../src/patterns.js';
+import { ROWS, LAYERS, COLS_PER_BAR, HIT_LAYER, chordRows, rowFreq } from '../src/model.js';
 
 let Proc;
 globalThis.sampleRate = 48000;
@@ -59,6 +59,25 @@ check(si.bad === 0 && si.rms > 0.02, `impala loop sounds (rms ${si.rms.toFixed(3
 const pmin = ri.P.reduce((a, b) => Math.min(a, b)), pmax = ri.P.reduce((a, b) => Math.max(a, b));
 check(pmin < 0.6 && pmax > 0.99, `pump dips on kicks (${pmin.toFixed(2)}..${pmax.toFixed(2)})`);
 check(render(imp, C, 1, { pump: 0 }).P.every((v) => v === 1), 'pump 0 = flat gain');
+
+// Arpeggio preset: harmonics fainter and shorter-lived the higher they go, nothing below 60 Hz
+const arp = new Float32Array(LAYERS * ROWS * C);
+arpPattern(arp, C);
+// a lone note: f, 2f … 5f each fainter and shorter than the one below, the fundamental rings 3–5 s
+const one = new Float32Array(ROWS * C);
+harmonicNote((_l, r, c, v) => { one[r * C + c] = v; }, C, (ARP_BPM / 60) * 8, 33, 0, 0.6, 4);
+const harm = [0, 12, 19, 24, 28];
+const peaks = harm.map((h) => one[(33 + h) * C]);
+const lives = harm.map((h) => one.subarray((33 + h) * C, (34 + h) * C).filter((v) => v > 0).length);
+check(peaks.every((v, k) => k === 0 || v < peaks[k - 1]), `harmonics get fainter (${peaks.map((v) => v.toFixed(2)).join(' ')})`);
+check(lives.every((v, k) => k === 0 || v < lives[k - 1]), `upper harmonics die sooner (${lives.join(' ')} cols)`);
+const ring = lives[0] / ((ARP_BPM / 60) * 8);
+check(ring >= 3 && ring <= 5, `fundamental rings ${ring.toFixed(1)} s`);
+let low = 0;
+for (let l = 0; l < LAYERS; l++) for (let r = 0; r < ROWS; r++) if (rowFreq(r) < 60) for (let c = 0; c < C; c++) low += arp[(l * ROWS + r) * C + c];
+check(low === 0, 'arp: nothing below 60 Hz');
+const sa = stats(render(arp, C, 6, { bpm: ARP_BPM, smear: 0.6 }).L);
+check(sa.bad === 0 && sa.rms > 0.01 && sa.pk < 1.5, `arp loop sounds (rms ${sa.rms.toFixed(3)}, peak ${sa.pk.toFixed(2)})`);
 
 // chords: A dorian on A3 → A C E G; chromatic → minor 7th
 check(JSON.stringify(chordRows(33, 9, 'dorian')) === JSON.stringify([33, 36, 40, 43]), 'Am7 in A dorian');

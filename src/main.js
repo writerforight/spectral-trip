@@ -3,7 +3,7 @@ import {
   LAYER_DEFS, NAMES, SCALES, noteName, inScale, chordRows, PAD_LAYER,
 } from './model.js';
 import { buildFX } from './fx.js';
-import { dreamPattern, impalaPattern } from './patterns.js';
+import { dreamPattern, impalaPattern, arpPattern, ARP_BPM } from './patterns.js';
 import { encodeWav } from './wav.js';
 
 const $ = (id) => document.getElementById(id);
@@ -632,6 +632,18 @@ function buildUI() {
     impalaPattern(S.grid, S.C, S.root, S.scale);
     syncControls();
     selectLayer(PAD_LAYER);
+    sendParams();
+    drawKeys();
+    changed();
+  });
+  $('arp').addEventListener('click', () => {
+    // one chord per bar: needs at least the four bars of Am–F–C–G
+    if (S.bars < 4) { setBars(4); $('bars').value = 4; } else pushUndo();
+    Object.assign(S, { bpm: ARP_BPM, root: 9, scale: 'minor', snap: true });
+    Object.assign(S.fx, { smear: 0.6, swirl: 0.25, trip: 0, echo: 0.2, space: 0.8, pump: 0, wobble: 0.1, sweep: 0 });
+    arpPattern(S.grid, S.C, S.bpm);
+    syncControls();
+    selectLayer(0);
     sendParams();
     drawKeys();
     changed();

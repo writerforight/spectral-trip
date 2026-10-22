@@ -67,6 +67,7 @@ body {
 }
 .btn.primary.on { box-shadow: 0 0 18px rgba(46, 230, 255, 0.55); }
 .btn.impala { border-color: rgba(255, 225, 77, 0.45); }
+.btn.arp { border-color: rgba(255, 79, 216, 0.45); }
 .btn.small { padding: 5px 10px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: wait; }
 

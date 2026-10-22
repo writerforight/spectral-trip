@@ -108,3 +108,53 @@ export function impalaPattern(grid, C, root, scale) {
     for (let r = 62; r <= 72; r++) at(4, r, c, 0.05 + ((c - (C - 10)) / 10) * 0.3);
   }
 }
+
+// "Arpeggio": a hand-drawn spectrogram. Am–F–C–G, one chord per bar at 70 BPM (eighths 0.43 s apart).
+// Every note is a sine line plus its 2f…5f harmonics as their own rows: each harmonic is fainter
+// than the one below and dies away faster, so a note rings 3–5 s and thins into a soft tail.
+// Sparse melody (A4 C5 E5, 2–3 s each) on top, a very faint root bass, a faint 2–4 kHz hiss band.
+export const ARP_BPM = 70;
+const HARM = [0, 12, 19, 24, 28];           // f, 2f, 3f, 4f, 5f in semitones
+
+// One note on the Glass layer: row r and its harmonics from column c0. `at` writes a cell (max-merge).
+// hold: seconds at a slowly drooping full level, fade: seconds for the fundamental to die out.
+export function harmonicNote(at, C, cps, r, c0, amp, fade, hold = 0) {
+  const tau = fade / 3.5;                   // ≈ −30 dB after `fade` seconds
+  for (let k = 1; k <= 5; k++) {
+    const a = amp * k ** -1.2, p = k ** 0.7;     // fainter and faster-dying per harmonic
+    for (let j = 0; j < C; j++) {
+      const t = j / cps;
+      const g = t < hold ? 1 - 0.3 * (t / hold) : (hold ? 0.7 : 1) * Math.exp(-(t - hold) / tau);
+      const v = a * g ** p;
+      if (v < 0.012) break;
+      at(0, r + HARM[k - 1], c0 + j, v);
+    }
+  }
+}
+
+export function arpPattern(grid, C, bpm = ARP_BPM) {
+  const { at } = tools(grid, C, 9, 'minor');
+  const cps = (bpm / 60) * 8;               // columns per second
+  const bars = C / COLS_PER_BAR;
+  const note = (r, c0, amp, fade, hold) => harmonicNote(at, C, cps, r, c0, amp, fade, hold);
+
+  // rows: A3=33 C4=36 E4=40 F3=29 G4=43 G3=31 B3=35 D4=38 · bass A2=21 F2=17 C3=24 G2=19
+  const chords = [[33, 36, 40], [29, 33, 36], [36, 40, 43], [31, 35, 38]];
+  const roots = [21, 17, 24, 19];
+  const shape = [0, 1, 2, 1, 0, 1, 2, 1];
+  // melody per bar: [col, row, hold seconds] — A4=45 C5=48 E5=52
+  const melody = [[[0, 52, 2.6]], [[8, 48, 2.2], [24, 45, 2.0]], [[4, 52, 2.8]], [[8, 45, 2.4]]];
+
+  for (let b = 0; b < bars; b++) {
+    const i = b % 4, c0 = b * COLS_PER_BAR;
+    shape.forEach((n, e) => note(chords[i][n], c0 + e * 4, e === 0 ? 0.8 : 0.68, 3.2 + ((e * 7 + i * 3) % 5) * 0.35));
+    for (const [c, r, hold] of melody[i]) note(r, c0 + c, 0.95, 3.5, hold);
+    // bass: plain sine, very faint, held through the bar and fading out under the next one
+    for (let j = 0; j < 44; j++) at(0, roots[i], c0 + j, j < 32 ? 0.24 - 0.004 * j : 0.11 * Math.exp(-(j - 32) / 5));
+  }
+
+  // hiss: a very faint, steady band from C7 (2.1 kHz) to the top of the grid
+  for (let c = 0; c < C; c++) {
+    for (let r = 72; r < ROWS; r++) at(4, r, c, 0.05 + 0.015 * Math.sin(c * 0.37 + r * 1.3));
+  }
+}
